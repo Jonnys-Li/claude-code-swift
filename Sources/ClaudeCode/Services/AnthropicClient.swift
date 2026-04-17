@@ -24,8 +24,9 @@ actor AnthropicClient {
         messages: [Message],
         maxTokens: Int,
         system: String? = nil,
-        tools: [[String: String]]? = nil
+        tools: [Tool]? = nil
     ) async throws -> APIResponse {
+        // Build request body
         var body: [String: Any] = [
             "model": model,
             "max_tokens": maxTokens,
@@ -36,11 +37,17 @@ actor AnthropicClient {
             body["system"] = system
         }
 
-        if let tools = tools {
-            body["tools"] = tools
+        if let tools = tools, !tools.isEmpty {
+            body["tools"] = tools.map { tool in
+                [
+                    "name": tool.name,
+                    "description": tool.description,
+                    "input_schema": tool.inputSchema
+                ]
+            }
         }
 
-        let jsonData = try JSONSerialization.data(withJSONObject: body)
+        let jsonData = try JSONSerialization.data(withJSONObject: body, options: [])
 
         var request = HTTPClientRequest(url: "\(baseURL)/messages")
         request.method = .POST
@@ -60,11 +67,16 @@ actor AnthropicClient {
         let bodyBytes = try await response.body.collect(upTo: 10 * 1024 * 1024)
         let responseData = Data(buffer: bodyBytes)
 
-        return try JSONDecoder().decode(APIResponse.self, from: responseData)
+        do {
+            return try JSONDecoder().decode(APIResponse.self, from: responseData)
+        } catch {
+            throw APIError.decodingError("Failed to decode response: \(error.localizedDescription)")
+        }
     }
 
     private func encodeMessage(_ message: Message) throws -> [String: Any] {
         let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
         let data = try encoder.encode(message)
         let json = try JSONSerialization.jsonObject(with: data)
         guard let dict = json as? [String: Any] else {

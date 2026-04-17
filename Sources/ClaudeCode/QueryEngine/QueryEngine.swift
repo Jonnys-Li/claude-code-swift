@@ -42,7 +42,7 @@ actor QueryEngine {
 
         while continueLoop {
             // Get tool definitions
-            let toolDefs = await toolRegistry.getToolDefinitions()
+            let tools = await toolRegistry.getAllTools()
 
             // Call API
             let response = try await client.sendMessage(
@@ -50,7 +50,7 @@ actor QueryEngine {
                 messages: conversationHistory,
                 maxTokens: maxTokens,
                 system: systemPrompt,
-                tools: toolDefs.isEmpty ? nil : toolDefs
+                tools: tools.isEmpty ? nil : tools
             )
 
             // Add assistant response to history

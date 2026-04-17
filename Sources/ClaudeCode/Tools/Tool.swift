@@ -49,13 +49,4 @@ actor ToolRegistry {
     func getAllTools() -> [Tool] {
         Array(tools.values)
     }
-
-    func getToolDefinitions() -> [[String: String]] {
-        tools.values.map { tool in
-            [
-                "name": tool.name,
-                "description": tool.description
-            ]
-        }
-    }
 }
