@@ -16,12 +16,25 @@ struct Configuration: Codable {
     static func load(from path: String? = nil) throws -> Configuration {
         let configPath = path ?? defaultConfigPath()
 
-        guard FileManager.default.fileExists(atPath: configPath) else {
-            return Configuration.default
+        var config: Configuration
+        if FileManager.default.fileExists(atPath: configPath) {
+            let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
+            config = try JSONDecoder().decode(Configuration.self, from: data)
+        } else {
+            config = Configuration.default
         }
 
-        let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
-        return try JSONDecoder().decode(Configuration.self, from: data)
+        // Override with environment variable if present
+        if let envApiKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] {
+            config = Configuration(
+                apiKey: envApiKey,
+                model: config.model,
+                permissionMode: config.permissionMode,
+                maxTokens: config.maxTokens
+            )
+        }
+
+        return config
     }
 
     static func defaultConfigPath() -> String {
