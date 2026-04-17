@@ -59,9 +59,12 @@ struct ClaudeCodeCLI: AsyncParsableCommand {
 
         // Register tools
         await engine.registerTool(EchoTool())
+        await engine.registerTool(ReadTool())
+        await engine.registerTool(WriteTool())
+        await engine.registerTool(BashTool())
 
         if verbose {
-            print("Query engine initialized")
+            print("Query engine initialized with 4 tools")
         }
 
         // Simple REPL loop
