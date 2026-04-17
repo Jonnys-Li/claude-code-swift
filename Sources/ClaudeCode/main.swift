@@ -42,7 +42,7 @@ struct ClaudeCodeCLI: AsyncParsableCommand {
             print("  API key: \(finalApiKey != nil ? "***" : "not set")")
         }
 
-        guard finalApiKey != nil else {
+        guard let apiKey = finalApiKey else {
             print("Error: API key not found. Set it via:")
             print("  1. --api-key flag")
             print("  2. ~/.claude/settings.json")
@@ -50,7 +50,40 @@ struct ClaudeCodeCLI: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
-        print("Starting REPL...")
-        // TODO: Start REPL
+        // Initialize QueryEngine
+        let engine = QueryEngine(
+            apiKey: apiKey,
+            model: finalModel,
+            maxTokens: finalMaxTokens
+        )
+
+        // Register tools
+        await engine.registerTool(EchoTool())
+
+        if verbose {
+            print("Query engine initialized")
+        }
+
+        // Simple REPL loop
+        print("\nClaude Code REPL - Type 'exit' to quit\n")
+
+        while true {
+            print("> ", terminator: "")
+            guard let input = readLine(), !input.isEmpty else {
+                continue
+            }
+
+            if input.lowercased() == "exit" || input.lowercased() == "quit" {
+                print("Goodbye!")
+                break
+            }
+
+            do {
+                let response = try await engine.query(input)
+                print("\n\(response)\n")
+            } catch {
+                print("Error: \(error.localizedDescription)\n")
+            }
+        }
     }
 }
