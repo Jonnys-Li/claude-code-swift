@@ -16,7 +16,7 @@ struct ClaudeCodeCLI: AsyncParsableCommand {
     var config: String?
 
     mutating func run() async throws {
-        print("Claude Code Swift v\(Self.configuration.version ?? "unknown")")
+        print("Claude Code Swift v\(Self.configuration.version)")
         print("Starting REPL...")
 
         // TODO: Initialize configuration

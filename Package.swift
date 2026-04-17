@@ -19,6 +19,9 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "NIO", package: "swift-nio"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
+            ],
+            swiftSettings: [
+                .unsafeFlags(["-parse-as-library"])
             ]
         ),
         .testTarget(
