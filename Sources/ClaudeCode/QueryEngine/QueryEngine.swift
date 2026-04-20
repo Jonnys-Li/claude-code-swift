@@ -34,6 +34,129 @@ actor QueryEngine {
         await toolRegistry.register(tool)
     }
 
+    /// Execute a query with streaming and return the response
+    func queryStreaming(_ userMessage: String) async throws -> String {
+        // Add user message to history
+        conversationHistory.append(.user(userMessage))
+
+        // Main conversation loop
+        var continueLoop = true
+        var finalResponse = ""
+
+        while continueLoop {
+            // Get tool definitions
+            let tools = await toolRegistry.getAllTools()
+
+            // Call streaming API
+            let stream = try await client.sendMessageStreaming(
+                model: model,
+                messages: conversationHistory,
+                maxTokens: maxTokens,
+                system: systemPrompt,
+                tools: tools.isEmpty ? nil : tools
+            )
+
+            // Accumulate response
+            var contentBlocks: [ContentBlock] = []
+            var currentTextBlock = ""
+
+            for try await event in stream {
+                switch event.type {
+                case "message_start":
+                    // Message started
+                    break
+
+                case "content_block_start":
+                    // New content block started
+                    if let block = event.contentBlock {
+                        switch block {
+                        case .text:
+                            currentTextBlock = ""
+                        case .toolUse:
+                            break
+                        case .toolResult:
+                            break
+                        }
+                    }
+
+                case "content_block_delta":
+                    // Content delta received
+                    if let delta = event.delta {
+                        if delta.type == "text_delta", let text = delta.text {
+                            currentTextBlock += text
+                            print(text, terminator: "")
+                            fflush(stdout)
+                        }
+                    }
+
+                case "content_block_stop":
+                    // Content block finished
+                    if !currentTextBlock.isEmpty {
+                        contentBlocks.append(.text(currentTextBlock))
+                        finalResponse += currentTextBlock
+                        currentTextBlock = ""
+                    }
+
+                case "message_delta":
+                    // Message metadata update
+                    break
+
+                case "message_stop":
+                    // Message finished
+                    continueLoop = false
+
+                default:
+                    break
+                }
+            }
+
+            print() // New line after streaming
+
+            // Add assistant response to history
+            let assistantMessage = Message(role: .assistant, content: contentBlocks)
+            conversationHistory.append(assistantMessage)
+
+            // Process tool uses
+            var toolResults: [ContentBlock] = []
+            var hasToolUse = false
+
+            for block in contentBlocks {
+                if case .toolUse(let id, let name, let input) = block {
+                    hasToolUse = true
+                    print("🔧 Tool requested: \(name)")
+
+                    // Check permissions
+                    let isAllowed = await checkPermission(toolName: name, input: input)
+
+                    if isAllowed {
+                        // Execute tool
+                        let result = await executeTool(name: name, input: input)
+
+                        toolResults.append(.toolResult(
+                            toolUseId: id,
+                            content: result.content,
+                            isError: result.isError
+                        ))
+                    } else {
+                        toolResults.append(.toolResult(
+                            toolUseId: id,
+                            content: "Permission denied by user",
+                            isError: true
+                        ))
+                    }
+                }
+            }
+
+            // If there were tool calls, send results back
+            if hasToolUse {
+                conversationHistory.append(Message(role: .user, content: toolResults))
+                continueLoop = true
+            }
+        }
+
+        return finalResponse
+    }
+
     /// Execute a query and return the response
     func query(_ userMessage: String) async throws -> String {
         // Add user message to history

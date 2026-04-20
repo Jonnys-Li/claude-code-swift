@@ -24,6 +24,9 @@ struct ClaudeCodeCLI: AsyncParsableCommand {
     @Flag(name: .shortAndLong, help: "Enable verbose logging")
     var verbose = false
 
+    @Flag(name: .long, help: "Disable streaming (use non-streaming API)")
+    var noStreaming = false
+
     mutating func run() async throws {
         print("Claude Code Swift v\(Self.configuration.version)")
 
@@ -97,8 +100,14 @@ struct ClaudeCodeCLI: AsyncParsableCommand {
             }
 
             do {
-                let response = try await engine.query(input)
-                print("\n\(response)\n")
+                let response: String
+                if noStreaming {
+                    response = try await engine.query(input)
+                    print("\n\(response)\n")
+                } else {
+                    response = try await engine.queryStreaming(input)
+                    print() // Extra newline after streaming
+                }
             } catch {
                 print("Error: \(error.localizedDescription)\n")
             }
