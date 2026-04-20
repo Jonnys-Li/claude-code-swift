@@ -4,6 +4,7 @@ import Foundation
 actor QueryEngine {
     private let client: AnthropicClient
     private let toolRegistry: ToolRegistry
+    private let permissionManager: PermissionManager
     private let model: String
     private let maxTokens: Int
 
@@ -13,10 +14,12 @@ actor QueryEngine {
     init(
         apiKey: String,
         model: String = "claude-opus-4-6",
-        maxTokens: Int = 4096
+        maxTokens: Int = 4096,
+        permissionMode: PermissionMode = .prompt
     ) {
         self.client = AnthropicClient(apiKey: apiKey)
         self.toolRegistry = ToolRegistry()
+        self.permissionManager = PermissionManager(mode: permissionMode)
         self.model = model
         self.maxTokens = maxTokens
     }
@@ -68,17 +71,29 @@ actor QueryEngine {
 
                 case .toolUse(let id, let name, let input):
                     hasToolUse = true
-                    print("🔧 Calling tool: \(name)")
+                    print("🔧 Tool requested: \(name)")
 
-                    // Execute tool
-                    let result = await executeTool(name: name, input: input)
+                    // Check permissions
+                    let isAllowed = await checkPermission(toolName: name, input: input)
 
-                    // Add tool result to next message
-                    toolResults.append(.toolResult(
-                        toolUseId: id,
-                        content: result.content,
-                        isError: result.isError
-                    ))
+                    if isAllowed {
+                        // Execute tool
+                        let result = await executeTool(name: name, input: input)
+
+                        // Add tool result to next message
+                        toolResults.append(.toolResult(
+                            toolUseId: id,
+                            content: result.content,
+                            isError: result.isError
+                        ))
+                    } else {
+                        // Permission denied
+                        toolResults.append(.toolResult(
+                            toolUseId: id,
+                            content: "Permission denied by user",
+                            isError: true
+                        ))
+                    }
 
                 case .toolResult:
                     // Tool results shouldn't appear in assistant messages
@@ -114,6 +129,40 @@ actor QueryEngine {
         } catch {
             return .error("Tool execution failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Check permission for tool execution
+    private func checkPermission(toolName: String, input: [String: String]) async -> Bool {
+        // Check if permission is already granted
+        if await permissionManager.isAllowed(toolName: toolName) {
+            return true
+        }
+
+        // Check if confirmation is required
+        if await permissionManager.requiresConfirmation(toolName: toolName) {
+            // Convert input to [String: Any] for display
+            let inputAny = input.reduce(into: [String: Any]()) { $0[$1.key] = $1.value }
+
+            // Prompt user
+            let decision = await PermissionPrompt.promptForPermission(
+                toolName: toolName,
+                parameters: inputAny
+            )
+
+            // Apply decision
+            await permissionManager.applyDecision(decision)
+
+            // Return result
+            switch decision {
+            case .allow, .allowAlways:
+                return true
+            case .deny, .denyAlways:
+                return false
+            }
+        }
+
+        // Default: check if allowed
+        return await permissionManager.isAllowed(toolName: toolName)
     }
 
     /// Clear conversation history

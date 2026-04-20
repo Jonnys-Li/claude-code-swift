@@ -51,10 +51,25 @@ struct ClaudeCodeCLI: AsyncParsableCommand {
         }
 
         // Initialize QueryEngine
+        let permissionMode: PermissionMode
+        if let configMode = fileConfig.permissionMode {
+            switch configMode {
+            case .alwaysAllow:
+                permissionMode = .auto
+            case .alwaysAsk:
+                permissionMode = .prompt
+            case .promptBased:
+                permissionMode = .prompt
+            }
+        } else {
+            permissionMode = .prompt
+        }
+
         let engine = QueryEngine(
             apiKey: apiKey,
             model: finalModel,
-            maxTokens: finalMaxTokens
+            maxTokens: finalMaxTokens,
+            permissionMode: permissionMode
         )
 
         // Register tools
